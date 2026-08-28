@@ -1,0 +1,13 @@
+# TIGER consumes and generates the complete 3 RQ + 2 OPQ token SID.
+include "config/tiger/amazon/tiger.gin"
+
+train.semantic_id_path = "out/tiger/amazon/{split}/rqopq/semantic_ids.pt"
+AmazonSeqDataset.split = "{split}"
+train.pretrained_rqvae_path = ""
+train.save_dir_root = "out/tiger/amazon/{split}/rqopq/tiger"
+train.wandb_logging = False
+train.seed = 42
+train.sem_id_dim = 5
+# 50 items × 5 tokens = 250 encoder tokens. These batches target an 8GB GPU.
+train.batch_size = 64
+train.infer_batch_size = 32

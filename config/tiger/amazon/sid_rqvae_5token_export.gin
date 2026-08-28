@@ -1,0 +1,7 @@
+# Export a five-codebook RQ-VAE checkpoint to the common SID artifact.
+include "config/tiger/amazon/sid_rqvae_export.gin"
+
+AmazonItemDataset.split = "{split}"
+export_rqvae_sids.n_layers = 5
+export_rqvae_sids.checkpoint_path = "out/tiger/amazon/{split}/rqvae_5token/checkpoint_epoch_4999.pt"
+export_rqvae_sids.save_dir_root = "out/tiger/amazon/{split}/rqvae_5token"

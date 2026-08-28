@@ -1,0 +1,2 @@
+# Compatibility entry for the RQ-OPQ TIGER configuration.
+include "config/tiger/amazon/tiger_rqopq.gin"

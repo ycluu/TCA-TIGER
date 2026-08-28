@@ -1,0 +1,8 @@
+# Stage 1: three RQ semantic codes + OPQ of the final residual.
+include "config/tiger/amazon/sid_rqkmeans.gin"
+
+fit_rqkmeans.quantizer_type = "rqopq"
+AmazonItemDataset.split = "{split}"
+fit_rqkmeans.opq_subspaces = 2
+fit_rqkmeans.opq_iterations = 3
+fit_rqkmeans.save_dir_root = "out/tiger/amazon/{split}/rqopq"

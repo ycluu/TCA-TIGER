@@ -1,0 +1,7 @@
+include "config/tiger/amazon/tiger.gin"
+train.semantic_id_path = "out/tiger/amazon/{split}/rqvae/semantic_ids.pt"
+AmazonSeqDataset.split = "{split}"
+train.pretrained_rqvae_path = ""
+train.save_dir_root = "out/tiger/amazon/{split}/rqvae/tiger"
+train.wandb_logging = False
+train.seed = 42

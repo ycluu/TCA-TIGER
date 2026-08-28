@@ -1,0 +1,14 @@
+# Ablation: consume [c0,c1,c2,o0,o1] as history, but predict only [c0,c1,c2].
+# It reuses the existing M=2 RQ-OPQ semantic_ids.pt; do not rerun quantization.
+include "config/tiger/amazon/tiger.gin"
+
+AmazonSeqDataset.split = "{split}"
+AmazonSeqDataset.target_n_layers = 3
+train.semantic_id_path = "out/tiger/amazon/{split}/rqopq/semantic_ids.pt"
+train.pretrained_rqvae_path = ""
+train.save_dir_root = "out/tiger/amazon/{split}/rqopq_target3/tiger"
+train.wandb_logging = False
+train.seed = 42
+train.sem_id_dim = 3
+train.batch_size = 64
+train.infer_batch_size = 32

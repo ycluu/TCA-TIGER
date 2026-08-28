@@ -1,0 +1,16 @@
+# Stage 1: RQ-KMeans with the same sentence encoder and SID shape as TIGER RQ-VAE.
+include "config/base.gin"
+import genrec.data.amazon
+
+fit_rqkmeans.dataset = @AmazonItemDataset
+fit_rqkmeans.dataset_folder = "dataset/amazon"
+fit_rqkmeans.encoder_model_name = %MODEL_HUB_SENTENCE_T5_BASE
+AmazonItemDataset.split = "{split}"
+fit_rqkmeans.quantizer_type = "rqkmeans"
+fit_rqkmeans.n_layers = 3
+fit_rqkmeans.codebook_size = 256
+fit_rqkmeans.random_state = 42
+fit_rqkmeans.seed = 42
+fit_rqkmeans.max_iter = 100
+fit_rqkmeans.batch_size = 4096
+fit_rqkmeans.save_dir_root = "out/tiger/amazon/{split}/rqkmeans"

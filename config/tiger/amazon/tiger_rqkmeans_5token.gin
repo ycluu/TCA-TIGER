@@ -1,0 +1,12 @@
+# TIGER for a full five-token RQ-KMeans SID.
+include "config/tiger/amazon/tiger.gin"
+
+AmazonSeqDataset.split = "{split}"
+train.semantic_id_path = "out/tiger/amazon/{split}/rqkmeans_5token/semantic_ids.pt"
+train.pretrained_rqvae_path = ""
+train.save_dir_root = "out/tiger/amazon/{split}/rqkmeans_5token/tiger"
+train.wandb_logging = False
+train.seed = 42
+train.sem_id_dim = 5
+train.batch_size = 64
+train.infer_batch_size = 32

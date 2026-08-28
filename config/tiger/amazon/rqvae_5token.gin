@@ -1,0 +1,7 @@
+# Length-matched RQ-VAE: five residual codebooks, K=256 each.
+include "config/tiger/amazon/rqvae.gin"
+
+AmazonItemDataset.split = "{split}"
+train.vae_n_layers = 5
+train.save_dir_root = "out/tiger/amazon/{split}/rqvae_5token"
+train.wandb_project = "tiger_rqvae_5token_{split}_training"

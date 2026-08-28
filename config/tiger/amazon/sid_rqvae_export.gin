@@ -1,0 +1,15 @@
+# Export a trained RQ-VAE into the common semantic_ids.pt artifact.
+include "config/base.gin"
+import genrec.data.amazon
+
+export_rqvae_sids.dataset = @AmazonItemDataset
+export_rqvae_sids.dataset_folder = "dataset/amazon"
+export_rqvae_sids.encoder_model_name = %MODEL_HUB_SENTENCE_T5_BASE
+AmazonItemDataset.split = "{split}"
+export_rqvae_sids.checkpoint_path = "out/tiger/amazon/{split}/rqvae/checkpoint_epoch_4999.pt"
+export_rqvae_sids.save_dir_root = "out/tiger/amazon/{split}/rqvae"
+export_rqvae_sids.input_dim = 768
+export_rqvae_sids.embed_dim = 32
+export_rqvae_sids.hidden_dims = [512, 256, 128, 64]
+export_rqvae_sids.codebook_size = 256
+export_rqvae_sids.n_layers = 3

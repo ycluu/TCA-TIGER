@@ -1,0 +1,6 @@
+# Length-matched RQ-KMeans: five residual codebooks, K=256 each.
+include "config/tiger/amazon/sid_rqkmeans.gin"
+
+AmazonItemDataset.split = "{split}"
+fit_rqkmeans.n_layers = 5
+fit_rqkmeans.save_dir_root = "out/tiger/amazon/{split}/rqkmeans_5token"

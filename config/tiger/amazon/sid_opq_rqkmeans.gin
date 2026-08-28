@@ -1,0 +1,2 @@
+# Compatibility entry: RQ-OPQ uses 3 RQ + 8 OPQ tokens.
+include "config/tiger/amazon/sid_rqopq.gin"
