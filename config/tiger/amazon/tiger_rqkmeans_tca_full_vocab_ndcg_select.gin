@@ -1,0 +1,5 @@
+include "config/tiger/amazon/tiger_rqkmeans_tca_full_vocab.gin"
+
+# Identical uniform TCA experiment with validation NDCG selection and isolated output.
+train.selection_metric = "ndcg10"
+train.save_dir_root = "out/tiger/amazon/{split}/rqkmeans/tiger_tca_full_vocab_ndcg_select"

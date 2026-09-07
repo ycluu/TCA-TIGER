@@ -1,0 +1,27 @@
+{
+  "dataset": "amazon_beauty",
+  "task": "sid_level_next_item_generation",
+  "seed": 42,
+  "selection_metric": "validation_ndcg@10",
+  "evaluation": {"beam_size": 10, "sid_levels": 3, "codebook_size": 256, "vocabulary_size": 769},
+  "models": {
+    "tiger": {
+      "checkpoint_epoch": 86,
+      "test": {"Recall@5": 0.04387400001127577, "Recall@10": 0.06763046493058297, "NDCG@5": 0.02781237733386489, "NDCG@10": 0.0354940226349516},
+      "checkpoint_sha256": "419771ef80f0cb48c3bea02d6a64bf563ac7dc8b9f1fb35133af3e255a0246bd"
+    },
+    "tiger_full_vocab_tca": {
+      "config": "config/tiger/amazon/tiger_rqkmeans_tca_full_vocab_ndcg_select.gin",
+      "checkpoint_epoch": 111,
+      "validation": {"Recall@5": 0.06689010215563451, "Recall@10": 0.097615903135501, "NDCG@5": 0.04423619428441696, "NDCG@10": 0.05412022804825411},
+      "test": {"Recall@5": 0.04677502416042299, "Recall@10": 0.06937648384739913, "NDCG@5": 0.03050662948482154, "NDCG@10": 0.03779058546815148},
+      "checkpoint_sha256": "17d6ae7b8914ee43176757669e0a592b229a9ad2c41d9225b9f607e73a950870"
+    }
+  },
+  "relative_test_gain_percent": {"Recall@5": 6.61217156, "Recall@10": 2.58170474, "NDCG@5": 9.68724147, "NDCG@10": 6.47028052},
+  "provenance": {
+    "tiger": "out/tiger/amazon/beauty/rqkmeans/tiger/results.json",
+    "tiger_full_vocab_tca": "out/tiger/amazon/beauty/rqkmeans/tiger_tca_full_vocab_ndcg_select/results.json",
+    "strict_replay": "out/tiger/amazon/beauty/rqkmeans/tiger_tca_full_vocab_ndcg_select/phase1_final_replay.json"
+  }
+}

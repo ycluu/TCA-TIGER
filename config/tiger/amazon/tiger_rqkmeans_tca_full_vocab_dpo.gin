@@ -1,0 +1,10 @@
+include "config/tiger/amazon/tiger_rqkmeans_tca_full_vocab_ndcg_select.gin"
+
+train.training_objective = "tca_full_vocab_dpo"
+train.phase2_initialization_path = "out/tiger/amazon/{split}/rqkmeans/tiger_tca_full_vocab_ndcg_select/best_model.pt"
+train.preference_cache_path = "out/tiger/amazon/{split}/preference/train_preference_pairs.pt"
+train.dpo_beta = 0.1
+train.lambda_pref = 0.1
+train.preference_sample_ratio = 1.0
+train.preference_microbatch_size = 32
+train.save_dir_root = "out/tiger/amazon/{split}/rqkmeans/tiger_tca_full_vocab_dpo"

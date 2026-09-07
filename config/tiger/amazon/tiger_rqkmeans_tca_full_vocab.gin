@@ -1,0 +1,9 @@
+include "config/tiger/amazon/tiger_rqkmeans.gin"
+
+# Strategy B: only the target distribution differs from original 769-way TIGER.
+train.training_objective = "tca_full_vocab"
+train.tca_alpha = 0.1
+train.tca_temperature = 1.0
+train.tca_objective = "conventional_soft_ce"
+train.tca_cache_path = "out/tiger/amazon/beauty/tca/tca_teacher_cache.pt"
+train.save_dir_root = "out/tiger/amazon/{split}/rqkmeans/tiger_tca_full_vocab"

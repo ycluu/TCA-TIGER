@@ -497,6 +497,7 @@ class AmazonSeqDataset(Dataset):
 
     def __getitem__(self, idx: int):
         from genrec.data.schemas import SeqData
+        from genrec.data.tca_teacher_cache import canonical_item_id, sample_key
 
         sample = self.samples[idx]
         user_id = sample['user_id']
@@ -517,6 +518,11 @@ class AmazonSeqDataset(Dataset):
             user_id=user_id,
             item_ids=item_sem_ids,
             target_ids=target_sem_ids,
+            sample_index=idx,
+            sample_key=sample_key(
+                [canonical_item_id(item) for item in sample['history']],
+                canonical_item_id(target_item),
+            ) if self.train_test_split == "train" else "",
         )
 
 

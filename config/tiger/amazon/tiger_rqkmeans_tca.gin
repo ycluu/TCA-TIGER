@@ -1,0 +1,8 @@
+include "config/tiger/amazon/tiger_rqkmeans.gin"
+
+# Only the training objective differs from the RQ-KMeans-3 TIGER baseline.
+train.training_objective = "tca"
+train.tca_alpha = 0.1
+train.tca_temperature = 1.0
+train.tca_objective = "official_log_mixture"
+train.tca_cache_path = "out/tiger/amazon/beauty/tca/tca_teacher_cache.pt"

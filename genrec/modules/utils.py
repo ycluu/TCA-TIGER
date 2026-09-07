@@ -5,6 +5,7 @@ import argparse
 import gin
 import logging
 import os
+import re
 import torch
 from datetime import datetime
 from genrec.data.schemas import TokenizedSeqBatch
@@ -153,9 +154,32 @@ def parse_config():
                         help="Gin parameter overrides (can be specified multiple times).")
     args = parser.parse_args()
 
-    # Read config file
-    with open(args.config_path, 'r') as f:
-        config_content = f.read()
+    def load_config(path: str, seen: set[str] | None = None) -> str:
+        """Load gin includes so split placeholders are expanded everywhere."""
+        path = os.path.abspath(path)
+        seen = set() if seen is None else seen
+        if path in seen:
+            raise ValueError(f"Circular gin include: {path}")
+        seen.add(path)
+
+        with open(path, 'r') as f:
+            lines = f.readlines()
+
+        content = []
+        include_pattern = re.compile(r'^\s*include\s+[\"\']([^\"\']+)[\"\']\s*$')
+        for line in lines:
+            match = include_pattern.match(line)
+            if match:
+                include_path = match.group(1)
+                if not os.path.isabs(include_path):
+                    include_path = os.path.join(os.getcwd(), include_path)
+                content.append(load_config(include_path, seen.copy()))
+            else:
+                content.append(line)
+        return ''.join(content)
+
+    # Read config and its includes before applying the split placeholder.
+    config_content = load_config(args.config_path)
 
     # Replace {split} placeholder if --split is provided
     if args.split:

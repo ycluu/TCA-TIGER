@@ -13,6 +13,8 @@ class SeqData(NamedTuple):
     user_id: int
     item_ids: List[int]
     target_ids: List[int]
+    sample_index: int = -1
+    sample_key: str = ""
 
 class SeqBatch(NamedTuple):
     """

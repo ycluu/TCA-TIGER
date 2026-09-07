@@ -194,6 +194,11 @@ cython_debug/
 .cursorindexingignore
 
 # GenRec specific
+*.pth
+tca_teacher_cache.pt
+# Generated model weights stay local; do not force-add checkpoint artifacts.
+best_model.pt
+checkpoint*.pt
 out/
 dataset/
 models_hub/
@@ -209,3 +214,14 @@ video/
 assets/
 reference/
 GRLM/
+
+# Release-local inventories, third-party worktrees, and temporary analysis files
+docs/internal/
+external/
+tmp/
+
+# Self-contained exploratory diagnostics with machine-specific local inputs
+scripts/audit_genpas_tca_data.py
+scripts/audit_hybrid_complementarity.py
+scripts/report_hybrid_complementarity.py
+scripts/audit_public_release.py

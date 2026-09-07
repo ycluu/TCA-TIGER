@@ -1,0 +1,4 @@
+include "config/tiger/amazon/tiger_rqkmeans.gin"
+
+# Pure denominator control: hard CE over the 256 valid tokens at each SID position.
+train.training_objective = "position_ce"

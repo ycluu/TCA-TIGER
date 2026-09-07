@@ -9,6 +9,7 @@ Pipeline:
 """
 
 import os
+from pathlib import Path
 import gin
 import torch
 import wandb
@@ -17,6 +18,8 @@ from genrec.models.tiger import Tiger
 from genrec.modules.utils import parse_config, setup_logger, get_run_split
 from genrec.data.schemas import SeqData
 from genrec.trainers.trainer_utils import setup_wandb, set_seed, save_run_results
+from genrec.trainers.tca_loss import TCATeacherCache, select_training_loss
+from genrec.trainers.validation_selection import ValidationSelection
 from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
@@ -74,6 +77,8 @@ def t5_collate(
         'attention_mask': attention_mask,
         'labels': labels,
         'raw_targets': raw_targets,
+        'sample_indices': torch.tensor([s.sample_index for s in batch], dtype=torch.long),
+        'sample_keys': [s.sample_key for s in batch],
     }
 
 
@@ -151,10 +156,38 @@ def train(
     eval_test_every_epoch=2,
     eval_valid_every_n_epochs=1,
     seed=42,
+    # Explicit objective selection. The default is the untouched HF T5 CE path.
+    training_objective="baseline",
+    tca_alpha=0.1,
+    tca_temperature=1.0,
+    tca_objective="official_log_mixture",
+    tca_cache_path=None,
+    selection_metric="recall10",
+    preference_cache_path=None,
+    phase2_initialization_path=None,
+    dpo_beta=0.1,
+    lambda_pref=0.1,
+    preference_sample_ratio=1.0,
+    preference_microbatch_size=32,
 ):
     _run_config = dict(locals())
+    phase2 = training_objective == "tca_full_vocab_dpo"
+    if phase2:
+        if not preference_cache_path or not phase2_initialization_path:
+            raise ValueError('Phase2 requires explicit preference cache and epoch111 initialization')
+        if (tca_alpha,tca_temperature,dpo_beta,lambda_pref,preference_sample_ratio) != (.1,1.,.1,.1,1.):
+            raise ValueError('Phase2 first controlled run requires fixed alpha/tau/beta/lambda/ratio')
+        if selection_metric != 'ndcg10' or early_stop_patience != 10:
+            raise ValueError('Phase2 must select by Validation NDCG@10 with patience10')
+        target_dir = Path(save_dir_root).resolve()
+        if target_dir == Path(phase2_initialization_path).resolve().parent or (target_dir.exists() and any(target_dir.iterdir())):
+            raise ValueError('Phase2 requires a clean new output directory; refusing overwrite')
+    selection = ValidationSelection(selection_metric)
     set_seed(seed)
     logger = setup_logger(save_dir_root, name="tiger")
+    logger.info("Selection metric: Validation %s", selection.metric)
+    logger.info("Early stopping metric: Validation %s", selection.metric)
+    logger.info("Test during training: enabled, diagnostic only (period=%s)", eval_test_every_epoch)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load datasets
@@ -187,6 +220,47 @@ def train(
     if train_dataset.sid_codebook_size != codebook_size:
         raise ValueError(f"SID artifact codebook_size={train_dataset.sid_codebook_size}, "
                          f"but train.codebook_size={codebook_size}")
+
+    if training_objective not in {"baseline", "position_ce", "tca", "tca_full_vocab", "tca_full_vocab_dpo"}:
+        raise ValueError(f"Unknown training_objective: {training_objective}")
+    tca_cache = None
+    if training_objective in {"tca", "tca_full_vocab", "tca_full_vocab_dpo"}:
+        expected_tca_objective = (
+            "official_log_mixture" if training_objective == "tca" else "conventional_soft_ce"
+        )
+        if tca_objective != expected_tca_objective:
+            raise ValueError(f"Unsupported TCA objective: {tca_objective}")
+        if not tca_cache_path:
+            raise ValueError("training_objective=tca requires tca_cache_path")
+        tca_cache = TCATeacherCache.load_and_validate(
+            tca_cache_path,
+            dataset="beauty",
+            num_samples=len(train_dataset),
+            num_items=12101,
+            sid_layers=sem_id_dim,
+            codebook_size=codebook_size,
+            sid_artifact_path=semantic_id_path,
+        )
+        sample_mismatches = tca_cache.validate_dataset(train_dataset)
+        logger.info(
+            "training_objective=%s loss_space=%s temperature=%s "
+            "alpha=%s collaborative_target=true objective=%s cache=%s "
+            "cache_hash=%s sid_hash=%s sample_mismatches=%s",
+            training_objective,
+            "256_per_position" if training_objective == "tca" else "769_full_vocab",
+            tca_temperature, tca_alpha, tca_objective, Path(tca_cache_path).resolve(),
+            tca_cache.cache_sha256, tca_cache.sid_sha256, sample_mismatches,
+        )
+    elif training_objective == "position_ce":
+        logger.info(
+            "training_objective=position_ce loss_space=256_per_position "
+            "temperature=1 collaborative_target=false"
+        )
+    else:
+        logger.info(
+            "training_objective=baseline loss_space=769 temperature=1 "
+            "collaborative_target=false"
+        )
 
     max_history_tokens = max_seq_len * input_sem_id_dim
 
@@ -223,6 +297,17 @@ def train(
 
     # Model
     model = Tiger(model_config).to(device)
+    preference_cache = None
+    if phase2:
+        from genrec.trainers.preference_loss import PreferenceCache, initialize_policy, golden_test, preference_loss
+        preference_cache = PreferenceCache.load(preference_cache_path,train_dataset,semantic_id_path,phase2_initialization_path)
+        initialize_policy(model,phase2_initialization_path)
+        logger.info('Phase2 initialization: Phase1 epoch111; reference: offline cached epoch111 logP')
+        probe_ids = torch.where(preference_cache.a['has_pair'])[0][:16].tolist()
+        probe = collate_fn([train_dataset[i] for i in probe_ids])
+        probe_pairs = preference_cache.batch(probe['sample_indices'],probe['sample_keys'],device)
+        golden_loss, golden_diag = golden_test(model,probe,probe_pairs,device)
+        logger.info('DPO initialization golden PASS: loss=%s diagnostics=%s',golden_loss,golden_diag)
     total_params, emb_params = model.num_parameters
     logger.info(f"Device: {device}, Params: {total_params:,} (emb: {emb_params:,})")
 
@@ -244,10 +329,6 @@ def train(
         logger.info("Using plain Adam, no scheduler")
 
     # Early stopping state
-    best_valid_recall10 = 0.0
-    best_epoch = -1
-    best_test_metrics = {}
-    early_stop_counter = 0
 
     def evaluate(loader, desc="Eval"):
         model.eval()
@@ -288,6 +369,7 @@ def train(
     for epoch in range(epochs):
         model.train()
         total_loss = 0.0
+        preference_logs = {}
         for batch in tqdm(train_loader, desc=f"Epoch {epoch}"):
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
@@ -295,7 +377,34 @@ def train(
 
             optimizer.zero_grad()
             with torch.amp.autocast('cuda', dtype=torch.float16):
-                loss, _ = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                baseline_loss, logits = model(
+                    input_ids=input_ids, attention_mask=attention_mask, labels=labels
+                )
+            teacher_probs = None
+            if training_objective in {"tca", "tca_full_vocab", "tca_full_vocab_dpo"}:
+                teacher_probs = tca_cache.batch(
+                    batch['sample_indices'], batch['sample_keys'], device=device
+                )
+            loss = select_training_loss(
+                baseline_loss,
+                objective="tca_full_vocab" if phase2 else training_objective,
+                logits=logits,
+                labels=labels,
+                teacher_probs=teacher_probs,
+                alpha=tca_alpha,
+                temperature=tca_temperature,
+            )
+            if phase2:
+                pair = preference_cache.batch(batch['sample_indices'],batch['sample_keys'],device,preference_sample_ratio)
+                with torch.amp.autocast('cuda',dtype=torch.float16):
+                    dpo_loss, diagnostics = preference_loss(model,input_ids,attention_mask,pair,
+                        beta=dpo_beta,microbatch_size=preference_microbatch_size)
+                base_loss = loss
+                loss = base_loss + lambda_pref*dpo_loss
+                fields = dict(train_total_loss=float(loss.detach()),train_tca_loss=float(base_loss.detach()),
+                              train_dpo_loss=float(dpo_loss.detach()),**diagnostics)
+                for key,value in fields.items():
+                    preference_logs[key] = preference_logs.get(key,0.)+value
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -307,6 +416,10 @@ def train(
         logger.info(f"Epoch {epoch} - loss: {avg_loss:.4f}")
 
         log_dict = {"epoch": epoch, "train/loss": avg_loss}
+        if phase2:
+            phase2_metrics = {k:v/len(train_loader) for k,v in preference_logs.items()}
+            logger.info('Phase2 losses/diagnostics: %s',phase2_metrics)
+            log_dict.update(phase2_metrics)
 
         # Valid evaluation (skip non-eval epochs)
         if (epoch + 1) % eval_valid_every_n_epochs == 0 or epoch == 0:
@@ -316,30 +429,25 @@ def train(
             for k, v in valid_metrics.items():
                 log_dict[f"eval/valid_{k}"] = v
 
-            cur_recall10 = valid_metrics['Recall@10']
-
-            # Check improvement
-            if cur_recall10 > best_valid_recall10:
-                best_valid_recall10 = cur_recall10
-                best_epoch = epoch
-                early_stop_counter = 0
+            # Only the configured validation metric decides saving and patience.
+            if selection.update(epoch, valid_metrics):
 
                 # Save best model
                 os.makedirs(save_dir_root, exist_ok=True)
                 torch.save(model.state_dict(), os.path.join(save_dir_root, "best_model.pt"))
-                logger.info(f"New best Valid R@10={cur_recall10:.4f} at epoch {epoch}")
+                logger.info(f"New best Valid {selection.metric}={selection.best_value:.8f} at epoch {epoch}")
 
                 # Test evaluation on improvement
                 test_metrics = evaluate(test_loader, desc=f"Test (Epoch {epoch})")
-                best_test_metrics = test_metrics
+                selection.record_selected_test(epoch, test_metrics)
                 logger.info(f"Epoch {epoch} - Test: {test_metrics}")
                 for k, v in test_metrics.items():
                     log_dict[f"eval/test_{k}"] = v
             else:
-                early_stop_counter += 1
-                logger.info(f"No improvement. Counter: {early_stop_counter}/{early_stop_patience}")
+                logger.info(f"No improvement in Valid {selection.metric}. Counter: {selection.counter}/{early_stop_patience}")
 
-                # Still run test periodically
+                # Periodic test metrics are diagnostic only and are never used
+                # for model selection or early stopping.
                 if (epoch + 1) % eval_test_every_epoch == 0:
                     test_metrics = evaluate(test_loader, desc=f"Test (Epoch {epoch})")
                     logger.info(f"Epoch {epoch} - Test: {test_metrics}")
@@ -349,15 +457,14 @@ def train(
         if wandb_logging:
             wandb.log(log_dict)
 
-        if early_stop_counter >= early_stop_patience:
-            logger.info(f"Early stopping at epoch {epoch}. Best epoch: {best_epoch}")
+        if selection.counter >= early_stop_patience:
+            logger.info(f"Early stopping at epoch {epoch}. Best epoch: {selection.best_epoch}")
             break
 
-    logger.info(f"Training done. Best Valid R@10={best_valid_recall10:.4f} at epoch {best_epoch}")
+    logger.info(f"Training done. Best Valid {selection.metric}={selection.best_value:.8f} at epoch {selection.best_epoch}")
     save_run_results(
         save_dir=save_dir_root, model="tiger", split=get_run_split(), seed=seed,
-        metrics={"best_epoch": best_epoch, "best_valid_Recall@10": best_valid_recall10,
-                 **{f"best_test_{k}": v for k, v in best_test_metrics.items()}},
+        metrics=selection.results(),
         config=_run_config,
     )
 
