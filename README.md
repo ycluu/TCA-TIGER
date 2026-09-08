@@ -134,11 +134,7 @@ $$
 最终损失为：
 
 $$
-\mathcal{L}_{TCA}
-=
--\sum_t\sum_{v=0}^{768}
-Q_t(v)
-\log P_\theta(v\mid H,y_{<t})
+\mathcal{L}_{TCA} = -\sum_t\sum_{v=0}^{768} Q_t(v) \log P_\theta(v\mid H,y_{<t})
 $$
 
 每个自回归位置都保留 TIGER 原始的完整 769 维输出空间。
